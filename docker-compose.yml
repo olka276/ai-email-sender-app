@@ -6,9 +6,12 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=-1
+      - OLLAMA_NUM_THREAD=10
     healthcheck:
       test: [ "CMD-SHELL", "ollama list || exit 1" ]
-      interval: 5s
+      interval: 30s
       timeout: 5s
       retries: 10
       start_period: 5s
@@ -19,11 +22,20 @@ services:
     container_name: ollama_model_loader
     environment:
       - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
     depends_on:
       ollama:
         condition: service_healthy
-    entrypoint: [ "/bin/sh", "-c", "ollama pull $${OLLAMA_MODEL}" ]
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        echo "1. Downloading model weights: $${OLLAMA_MODEL}..."
+        ollama pull $${OLLAMA_MODEL}
+        echo "2. Model warmup..."
+        ollama run $${OLLAMA_MODEL} "ok" --keepalive 15m > /dev/null
+        echo "3. Model ready!"
     restart: "no"
 
   mailhog:
@@ -42,10 +54,7 @@ services:
     volumes:
       - .:/app
     environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
-      - SMTP_HOST=mailhog
-      - SMTP_PORT=1025
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
     depends_on:
       ollama-pull:
         condition: service_completed_successfully
