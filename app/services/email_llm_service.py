@@ -1,8 +1,7 @@
+from config import settings
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
 from langchain_core.messages import SystemMessage
-
-from config import settings
 from tools.send_email_to_department import send_email_to_department
 from typing import Any
 
@@ -51,6 +50,6 @@ class LLMService:
                     "message": message,
                 })
 
-                return raw_args
+                return f"Mail forwarded to: {department_value}"
 
         return f"Mail not sent: {prompt_result.content}"

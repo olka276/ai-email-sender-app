@@ -28,7 +28,7 @@ Aplikacja jest w pełni skonteneryzowana przy użyciu Dockera. Środowisko skła
 - git clone https://github.com/olka276/ai-email-sender-app.git
 - cd ai-email-sender-app
 2. Zbuduj kontenery
-- docker compose up --build
+- `docker compose up --build`
 Przy pierwszym uruchomieniu kontener ollama_model_loader pobierze wagi modelu. Po pojawieniu się komunikatu "Model ready!" uruchomi się kontener ai_api
 3. Dostępne usługi
 - Swagger: http://localhost:8000/api/v1/docs
@@ -41,7 +41,7 @@ Przykładowe zapytanie cURL
 curl -X POST "http://localhost:8000/api/v1/send" \
   -H "Content-Type: application/json" \
   -d '{
-    "sender": "jan.kowalski@firma.pl",
+    "email": "jan.kowalski@firma.pl",
     "message": "Dzień dobry, chciałbym złożyć wniosek o zwolnienie lekarskie (L4) oraz uzyskać zaświadczenie o zarobkach."
   }'
 ```
@@ -49,10 +49,7 @@ curl -X POST "http://localhost:8000/api/v1/send" \
 oczekiwana odpowiedź (200):
 ```bash
 {
-  "status": "sent",
-  "classification": {
-    "department": "kadry"
-  }
+   "result": "Mail forwarded to: kadry"
 }
 ```
 

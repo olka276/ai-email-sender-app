@@ -20,7 +20,7 @@ async def forward_mail(payload: SendEmailRequest):
         async with rpm_limiter:
             try:
                 result = await email_llm_service.forward_email(payload.email, payload.message)
-                return {"status": "sent", "classification": result}
+                return {"result": result}
             except Exception as e:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to process email: {str(e)}")
