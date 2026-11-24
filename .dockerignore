@@ -1,0 +1,9 @@
+.git
+.idea
+.venv
+.env
+ollama_data
+tests
+**/__pycache__
+.pytest_cache
+README.md

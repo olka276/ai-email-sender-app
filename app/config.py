@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     default_email_subject: str = "Wiadomość przekierowana przez Agenta AI"
 
     prompt_path: Path = APP_DIR / "prompts" / "email_recipient_prompt.md"
-    model_config = SettingsConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     semaphore_limit: int = 3
     rpm_limit_max_rate: int = 10
