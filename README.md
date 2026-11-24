@@ -66,6 +66,7 @@ docker run --rm -v "$PWD":/src:ro -e PYTHONDONTWRITEBYTECODE=1 -e UV_LINK_MODE=c
 - stały kontekst systemowy (SystemMessage) odseparowany od HumanMessage, dzięki czemu jest użyty caching, co skraca czas przetwarzania kolejnych zapytań
 2. Determinizm
 - Model językowy decyduje wyłącznie o dziale, do którego wyśle e-mail, natomiast pozostałe dane takie, jak treść czy email pierwotnego nadawcy są przekazywane w sposób deterministyczny przez InjectedToolArg. Zapobiega to halucynacjom oraz modyfikacji treści wiadomości przez model.
+- gdy model nie wywoła narzędzia albo zwróci nieznany dział, zgłoszenie trafia do `other@example.com` (z ostrzeżeniem w logu), więc żadna wiadomość nie ginie
 3. Ochrona przed prompt injection
 - treść wiadomości jest izolowana w tagach <user_message> a instrukcje nakazują traktować ją wyłącznie jako dane wejściowe, ignorując w niej próby nadpisania instrukcji.
 4. Asynchroniczność i throttling
@@ -85,3 +86,5 @@ docker run --rm -v "$PWD":/src:ro -e PYTHONDONTWRITEBYTECODE=1 -e UV_LINK_MODE=c
 7. Zarządzanie zależnościami i obraz
 - `uv` z lockfile'em (`uv.lock`) zapewnia odtwarzalny build; obraz instaluje zależności w osobnej warstwie (cache) komendą `uv sync --frozen --no-dev`
 - `.dockerignore` wyklucza m.in. `ollama_data` (wagi modelu) z kontekstu builda
+8. Walidacja wejścia
+- `message` ma limit 2000 znaków (`MESSAGE_MAX_LENGTH`) i nie może być pusty. Prompt systemowy zajmuje ok. 800 z 2048 tokenów kontekstu modelu; dłuższa wiadomość mogłaby wypchnąć instrukcje z okna kontekstu. Przekroczenie limitu daje `422`

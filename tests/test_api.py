@@ -1,6 +1,7 @@
 import logging
 
 from exceptions import EmailDeliveryError, LLMUnavailableError
+from schemas.send_email_request import MESSAGE_MAX_LENGTH
 
 VALID = {"email": "jan.nowak@example.com", "message": "Nie działa mi komputer"}
 
@@ -67,3 +68,28 @@ def test_delivery_error_does_not_break_subsequent_requests(client, fake_service)
     assert client.post("/api/v1/send", json=VALID).status_code == 202
     assert client.post("/api/v1/send", json=VALID).status_code == 202
     assert fake_service.forward_email.await_count == 2
+
+
+def test_send_accepts_message_at_max_length(client, fake_service):
+    message = "a" * MESSAGE_MAX_LENGTH
+
+    response = client.post("/api/v1/send", json={**VALID, "message": message})
+
+    assert response.status_code == 202
+    fake_service.forward_email.assert_awaited_once_with(VALID["email"], message)
+
+
+def test_send_rejects_message_over_max_length(client, fake_service):
+    response = client.post(
+        "/api/v1/send", json={**VALID, "message": "a" * (MESSAGE_MAX_LENGTH + 1)}
+    )
+
+    assert response.status_code == 422
+    fake_service.forward_email.assert_not_called()
+
+
+def test_send_rejects_empty_message(client, fake_service):
+    response = client.post("/api/v1/send", json={**VALID, "message": ""})
+
+    assert response.status_code == 422
+    fake_service.forward_email.assert_not_called()

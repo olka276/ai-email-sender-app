@@ -6,9 +6,9 @@ from config import settings
 from exceptions import LLMUnavailableError
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage
+from schemas import Department
 from tools.send_email_to_department import send_email_to_department
-from typing import Any
 
 class LLMService:
     def __init__(self, logger: logging.Logger | None = None):
@@ -25,7 +25,7 @@ class LLMService:
         self.system_prompt = settings.prompt_path.read_text(encoding="utf-8")
         self.default_subject = settings.default_email_subject
 
-    async def forward_email(self, original_sender: str, message: str) -> Any:
+    async def forward_email(self, original_sender: str, message: str) -> str:
         prompt = ChatPromptTemplate.from_messages([
             SystemMessage(content=self.system_prompt),
             HumanMessagePromptTemplate.from_template(
@@ -45,28 +45,41 @@ class LLMService:
         except (httpx.HTTPError, ollama.ResponseError, OSError) as exc:
             raise LLMUnavailableError(f"LLM request failed: {exc}") from exc
 
-        tool_calls = prompt_result.tool_calls
+        department = self._select_department(original_sender, prompt_result)
 
-        for tool_call in tool_calls:
-            if tool_call["name"] == "send_email_to_department":
-                raw_args = tool_call["args"]
-                department_value = raw_args.get("department") or "other"
-                self.logger.info(
-                    "LLM routed message from %s to department '%s'",
-                    original_sender, department_value,
+        await send_email_to_department.ainvoke({
+            "department": department.value,
+            "original_sender": original_sender,
+            "subject": self.default_subject,
+            "message": message,
+        })
+
+        return f"Mail forwarded to: {department.value}"
+
+    def _select_department(self, original_sender: str, prompt_result: AIMessage) -> Department:
+        """Pick the department from the LLM answer; fall back to OTHER so no message is lost."""
+        for tool_call in prompt_result.tool_calls:
+            if tool_call["name"] != "send_email_to_department":
+                continue
+
+            raw_department = tool_call["args"].get("department")
+            try:
+                department = Department(raw_department)
+            except ValueError:
+                self.logger.warning(
+                    "LLM returned unknown department %r for message from %s, falling back to 'other'",
+                    raw_department, original_sender,
                 )
+                return Department.OTHER
 
-                await send_email_to_department.ainvoke({
-                    "department": department_value,
-                    "original_sender": original_sender,
-                    "subject": self.default_subject,
-                    "message": message,
-                })
-
-                return f"Mail forwarded to: {department_value}"
+            self.logger.info(
+                "LLM routed message from %s to department '%s'",
+                original_sender, department.value,
+            )
+            return department
 
         self.logger.warning(
-            "LLM did not call the email tool for message from %s: %r",
+            "LLM did not call the email tool for message from %s (answer: %r), falling back to 'other'",
             original_sender, prompt_result.content,
         )
-        return f"Mail not sent: {prompt_result.content}"
+        return Department.OTHER

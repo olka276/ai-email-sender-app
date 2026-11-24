@@ -62,14 +62,49 @@ async def test_missing_department_falls_back_to_other(service):
     assert tool.ainvoke.await_args.args[0]["department"] == "other"
 
 
-async def test_no_tool_call_sends_nothing(service):
+async def test_no_tool_call_falls_back_to_other(service):
     service.llm_with_tools = fake_llm(AIMessage(content="nie wiem"))
 
     with patch(TOOL_PATH, new=fake_tool()) as tool:
         result = await service.forward_email("jan@example.com", "?")
 
-    tool.ainvoke.assert_not_called()
-    assert result.startswith("Mail not sent")
+    assert result == "Mail forwarded to: other"
+    payload = tool.ainvoke.await_args.args[0]
+    assert payload["department"] == "other"
+    assert payload["message"] == "?"
+    assert payload["original_sender"] == "jan@example.com"
+
+
+async def test_unknown_department_falls_back_to_other(service, caplog):
+    service.llm_with_tools = fake_llm(
+        AIMessage(
+            content="",
+            tool_calls=[
+                {"name": "send_email_to_department", "args": {"department": "sales"}, "id": "1"}
+            ],
+        )
+    )
+
+    with patch(TOOL_PATH, new=fake_tool()) as tool, caplog.at_level(logging.WARNING):
+        result = await service.forward_email("jan@example.com", "?")
+
+    assert result == "Mail forwarded to: other"
+    assert tool.ainvoke.await_args.args[0]["department"] == "other"
+    assert "sales" in caplog.text
+
+
+async def test_other_tool_name_is_ignored(service):
+    service.llm_with_tools = fake_llm(
+        AIMessage(
+            content="",
+            tool_calls=[{"name": "something_else", "args": {"department": "it"}, "id": "1"}],
+        )
+    )
+
+    with patch(TOOL_PATH, new=fake_tool()) as tool:
+        await service.forward_email("jan@example.com", "?")
+
+    assert tool.ainvoke.await_args.args[0]["department"] == "other"
 
 
 async def test_llm_connection_error_is_wrapped(service):
@@ -104,7 +139,7 @@ async def test_routing_decision_is_logged(service, caplog):
 async def test_missing_tool_call_is_logged_as_warning(service, caplog):
     service.llm_with_tools = fake_llm(AIMessage(content="nie wiem"))
 
-    with caplog.at_level(logging.WARNING):
+    with patch(TOOL_PATH, new=fake_tool()), caplog.at_level(logging.WARNING):
         await service.forward_email("jan@example.com", "?")
 
     assert any(r.levelno == logging.WARNING for r in caplog.records)
