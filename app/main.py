@@ -1,6 +1,10 @@
 from fastapi import FastAPI, APIRouter
 from routers import health, emails
 
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
 app = FastAPI(
     docs_url="/api/v1/docs",
     openapi_url="/api/v1/openapi.json"

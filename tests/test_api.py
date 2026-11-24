@@ -1,0 +1,47 @@
+import logging
+
+VALID = {"email": "jan.nowak@example.com", "message": "Nie działa mi komputer"}
+
+
+def test_health(client):
+    response = client.get("/api/v1/health")
+    assert response.status_code == 200
+
+
+def test_docs_available(client):
+    assert client.get("/api/v1/docs").status_code == 200
+
+
+def test_send_returns_202_and_runs_in_background(client, fake_service):
+    response = client.post("/api/v1/send", json=VALID)
+
+    assert response.status_code == 202
+    assert response.json() == {"status": "accepted"}
+    fake_service.forward_email.assert_awaited_once_with(
+        VALID["email"], VALID["message"]
+    )
+
+
+def test_send_rejects_invalid_email(client, fake_service):
+    response = client.post("/api/v1/send", json={**VALID, "email": "not-email"})
+
+    assert response.status_code == 422
+    fake_service.forward_email.assert_not_called()
+
+
+def test_send_rejects_missing_message(client, fake_service):
+    response = client.post("/api/v1/send", json={"email": VALID["email"]})
+
+    assert response.status_code == 422
+    fake_service.forward_email.assert_not_called()
+
+
+def test_background_failure_is_logged_and_not_leaked(client, fake_service, caplog):
+    fake_service.forward_email.side_effect = RuntimeError("ollama down")
+
+    with caplog.at_level(logging.ERROR):
+        response = client.post("/api/v1/send", json=VALID)
+
+    assert response.status_code == 202
+    assert "ollama down" not in response.text
+    assert "Failed to process message" in caplog.text
