@@ -1,4 +1,5 @@
 from config import settings
+from exceptions import EmailDeliveryError
 from email.message import EmailMessage
 from langchain_core.tools import tool, InjectedToolArg
 from schemas import Department, SendEmailToolInput
@@ -36,12 +37,17 @@ async def send_email_to_department(
     email_message["Reply-To"] = original_sender
     email_message.set_content(message)
 
-    await aiosmtplib.send(
-        email_message,
-        hostname=settings.smtp_host,
-        port=settings.smtp_port,
-        timeout=settings.smtp_timeout,
-    )
+    try:
+        await aiosmtplib.send(
+            email_message,
+            hostname=settings.smtp_host,
+            port=settings.smtp_port,
+            timeout=settings.smtp_timeout,
+        )
+    except (aiosmtplib.SMTPException, OSError) as exc:
+        raise EmailDeliveryError(
+            f"SMTP delivery to {department_email} failed: {exc}"
+        ) from exc
 
     return f"Success: E-mail with body: '{message}' has been sent to: {department_email}."
 

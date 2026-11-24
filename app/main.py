@@ -1,9 +1,9 @@
 from fastapi import FastAPI, APIRouter
 from routers import health, emails
 
-import logging
+from logging_config import setup_logging
 
-logging.basicConfig(level=logging.INFO)
+setup_logging()
 
 app = FastAPI(
     docs_url="/api/v1/docs",

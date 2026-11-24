@@ -40,9 +40,16 @@ Zgłoszenie jest przetwarzane w tle (FastAPI `BackgroundTasks`). Po kilku sekund
 
 ## Testy
 Testy (pytest) nie wymagają Ollamy ani Mailhoga - LLM i SMTP są mockowane.
+Lokalnie:
 ```bash
 pip install -r requirements-dev.txt
 pytest
+```
+
+Albo w Dockerze (bez instalowania czegokolwiek na hoście):
+```bash
+docker run --rm -v "$PWD":/src:ro -e PYTHONDONTWRITEBYTECODE=1 python:3.12-slim sh -c \
+  'cp -r /src /work && cd /work && pip -q install -r requirements-dev.txt && pytest -q -p no:cacheprovider'
 ```
 
 ---
@@ -57,7 +64,12 @@ pytest
 3. Ochrona przed prompt injection
 - treść wiadomości jest izolowana w tagach <user_message> a instrukcje nakazują traktować ją wyłącznie jako dane wejściowe, ignorując w niej próby nadpisania instrukcji.
 4. Asynchroniczność i throttling
-- endpoint `POST /send` zwraca od razu `202 Accepted`, a klasyfikacja i wysyłka odbywa się w tle (`BackgroundTasks`); zadania nie są trwałe - restart kontenera gubi te będące w toku (kolejka, np. Redis, byłaby naturalnym kolejnym krokiem)- stos asynchroniczny (FastAPI + ainvoke + aiosmptlib) zapobiega blokowaniu event loopa przy komunikacji z serwerem SMTP oraz API modelu
+- endpoint `POST /send` zwraca od razu `202 Accepted`, a klasyfikacja i wysyłka odbywa się w tle (`BackgroundTasks`); zadania nie są trwałe - restart kontenera gubi te będące w toku (kolejka, np. Redis, byłaby naturalnym kolejnym krokiem)
+- stos asynchroniczny (FastAPI + ainvoke + aiosmptlib) zapobiega blokowaniu event loopa przy komunikacji z serwerem SMTP oraz API modelu
 - limit współbieżnych procesów oraz rate limiting chroni lokalne zasoby przed przeciążeniem
 5. Zcentralizowana konfiguracja (pydantic-settings)
 - walidacja ścieżek i ustawień przy starcie aplikacji w jednym pliku config.py
+6. Logowanie i obsługa błędów
+- błędy domenowe (`LLMUnavailableError`, `EmailDeliveryError`) dziedziczą po `EmailProcessingError` i są rozróżniane w logach; nieoczekiwane wyjątki są logowane ze stack trace
+- logger jest wstrzykiwany przez `Depends` (`dependencies.get_logger`), poziom ustawia zmienna `LOG_LEVEL` (domyślnie `INFO`)
+- klient nigdy nie dostaje szczegółów błędu wewnętrznego

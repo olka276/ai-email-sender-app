@@ -1,5 +1,7 @@
 import logging
 
+from exceptions import EmailDeliveryError, LLMUnavailableError
+
 VALID = {"email": "jan.nowak@example.com", "message": "Nie działa mi komputer"}
 
 
@@ -44,4 +46,24 @@ def test_background_failure_is_logged_and_not_leaked(client, fake_service, caplo
 
     assert response.status_code == 202
     assert "ollama down" not in response.text
-    assert "Failed to process message" in caplog.text
+    assert "Unexpected error processing message" in caplog.text
+
+
+def test_domain_errors_are_logged_with_type_and_not_leaked(client, fake_service, caplog):
+    fake_service.forward_email.side_effect = LLMUnavailableError("ollama down")
+
+    with caplog.at_level(logging.ERROR):
+        response = client.post("/api/v1/send", json=VALID)
+
+    assert response.status_code == 202
+    assert "ollama down" not in response.text
+    assert "LLMUnavailableError" in caplog.text
+    assert VALID["email"] in caplog.text
+
+
+def test_delivery_error_does_not_break_subsequent_requests(client, fake_service):
+    fake_service.forward_email.side_effect = [EmailDeliveryError("smtp down"), "ok"]
+
+    assert client.post("/api/v1/send", json=VALID).status_code == 202
+    assert client.post("/api/v1/send", json=VALID).status_code == 202
+    assert fake_service.forward_email.await_count == 2

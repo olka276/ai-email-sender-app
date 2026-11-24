@@ -1,6 +1,9 @@
 from unittest.mock import AsyncMock, patch
 
+import aiosmtplib
 import pytest
+
+from exceptions import EmailDeliveryError
 
 from schemas import Department
 from tools.send_email_to_department import (
@@ -30,3 +33,19 @@ async def test_sends_to_correct_address_with_reply_to(department):
 
 def test_every_department_has_an_address():
     assert set(DEPARTMENT_EMAIL_MAP) == set(Department)
+
+
+@pytest.mark.parametrize("error", [aiosmtplib.SMTPException("boom"), ConnectionRefusedError()])
+async def test_smtp_failure_raises_delivery_error(error):
+    with patch(
+        "tools.send_email_to_department.aiosmtplib.send", new=AsyncMock(side_effect=error)
+    ):
+        with pytest.raises(EmailDeliveryError):
+            await send_email_to_department.ainvoke(
+                {
+                    "department": Department.IT,
+                    "original_sender": "jan.nowak@example.com",
+                    "subject": "Temat",
+                    "message": "Treść",
+                }
+            )
